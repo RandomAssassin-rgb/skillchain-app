@@ -22,6 +22,7 @@ interface Credential {
 export function CredentialCard({ credential }: { credential: Credential }) {
   const [showQR, setShowQR] = useState(false)
   const [qrImageUrl, setQrImageUrl] = useState<string | null>(null)
+  const [verificationUrl, setVerificationUrl] = useState<string | null>(null)
   const [isGeneratingQR, setIsGeneratingQR] = useState(false)
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false)
 
@@ -30,7 +31,11 @@ export function CredentialCard({ credential }: { credential: Credential }) {
   const handleViewQR = async () => {
     setIsGeneratingQR(true)
     try {
-      // Pass complete credential data for embedding in QR
+      const baseUrl =
+        typeof window !== "undefined"
+          ? window.location.origin
+          : process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+
       const fullCredentialData = {
         id: credential.id,
         title: credential.title,
@@ -42,6 +47,13 @@ export function CredentialCard({ credential }: { credential: Credential }) {
         field: credential.field,
         signature: credential.signature,
       }
+
+      const jsonString = JSON.stringify(fullCredentialData)
+      const base64 = btoa(unescape(encodeURIComponent(jsonString)))
+      const urlSafeBase64 = base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "")
+      const verifyUrl = `${baseUrl}/verify?data=${urlSafeBase64}`
+
+      setVerificationUrl(verifyUrl)
 
       const url = await generateQRCode(credential.id, fullCredentialData)
       setQrImageUrl(url)
@@ -67,7 +79,6 @@ export function CredentialCard({ credential }: { credential: Credential }) {
   const handleDownloadPDF = async () => {
     setIsGeneratingPDF(true)
     try {
-      // Generate fresh QR for PDF
       const fullCredentialData = {
         id: credential.id,
         title: credential.title,
@@ -127,9 +138,26 @@ export function CredentialCard({ credential }: { credential: Credential }) {
     }
   }
 
+  const handleCopyLink = async () => {
+    if (!verificationUrl) return
+    try {
+      await navigator.clipboard.writeText(verificationUrl)
+      toast({
+        title: "Link Copied",
+        description: "Verification link copied to clipboard",
+        variant: "success" as any,
+      })
+    } catch {
+      toast({
+        title: "Copy Failed",
+        description: "Failed to copy link",
+        variant: "destructive",
+      })
+    }
+  }
+
   return (
     <div className="bg-slate-800/50 border border-slate-700 rounded-lg overflow-hidden hover:border-slate-600 transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/10 hover:-translate-y-1">
-      {/* Card Header */}
       <div className="bg-gradient-to-r from-blue-500/20 to-emerald-500/20 border-b border-slate-700 p-4">
         <div className="flex items-start justify-between gap-2 mb-2">
           <h3 className="font-semibold text-white text-sm leading-tight">{credential.title}</h3>
@@ -144,7 +172,6 @@ export function CredentialCard({ credential }: { credential: Credential }) {
         <p className="text-xs text-slate-300">{credential.issuer}</p>
       </div>
 
-      {/* Card Body */}
       <div className="p-4 space-y-4">
         <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-3">
           <p className="text-slate-400 mb-1 text-xs">Credential ID</p>
@@ -181,20 +208,43 @@ export function CredentialCard({ credential }: { credential: Credential }) {
         )}
       </div>
 
-      {/* QR Preview */}
       {showQR && qrImageUrl && (
         <div className="border-t border-slate-700 p-6 bg-slate-900/50 animate-in fade-in duration-200">
           <div className="flex justify-center mb-4">
-            <div className="bg-white p-4 rounded-lg">
-              <img src={qrImageUrl || "/placeholder.svg"} alt="Credential QR Code" className="w-48 h-48" />
-            </div>
+            <a
+              href={verificationUrl || "#"}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block hover:opacity-80 transition-opacity"
+            >
+              <div className="bg-white p-4 rounded-lg">
+                <img src={qrImageUrl || "/placeholder.svg"} alt="Credential QR Code" className="w-48 h-48" />
+              </div>
+            </a>
           </div>
           <p className="text-xs text-center text-slate-400 mb-2">Scan to verify this credential from any device</p>
-          <p className="text-xs text-center text-slate-500">Works with any QR scanner or Google Lens</p>
+          <p className="text-xs text-center text-slate-500 mb-4">Works with any QR scanner or Google Lens</p>
+
+          {verificationUrl && (
+            <div className="bg-slate-800 border border-slate-700 rounded-lg p-3">
+              <p className="text-xs text-slate-400 mb-2">Verification Link:</p>
+              <div className="flex items-center gap-2">
+                <code className="text-blue-400 text-xs font-mono flex-1 break-all">{verificationUrl}</code>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleCopyLink}
+                  className="h-7 px-2 text-xs hover:bg-blue-500/20 text-blue-400 shrink-0"
+                >
+                  Copy Link
+                </Button>
+              </div>
+              <p className="text-xs text-slate-500 mt-2">Share this link to verify the credential</p>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Card Footer */}
       <div className="border-t border-slate-700 p-4 flex gap-2 bg-slate-900/30">
         <Button
           variant="outline"

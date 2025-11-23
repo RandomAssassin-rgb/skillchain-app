@@ -6,7 +6,9 @@ import Link from "next/link"
 import { CredentialCard } from "@/components/credential-card"
 import { DashboardHeader } from "@/components/dashboard-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { getAllCredentials } from "@/lib/credentials-store"
+import { createClient } from "@/lib/supabase/client"
+import { useRouter } from "next/navigation"
+import { getCredentialsByWallet, getDashboardStats } from "@/app/actions/credentials"
 
 const recentActivities = [
   { action: "Credential Verified", issuer: "Stanford University", time: "2 hours ago", type: "verify" },
@@ -25,36 +27,85 @@ const achievements = [
 export default function Dashboard() {
   const [credentials, setCredentials] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [user, setUser] = useState<any | null>(null)
+  const [stats, setStats] = useState({
+    totalCredentials: 0,
+    validCredentials: 0,
+    verificationCount: 0,
+    trustScore: 0,
+  })
+  const router = useRouter()
+  const supabase = createClient()
 
   useEffect(() => {
-    const stored = getAllCredentials()
-    const formattedCredentials = stored.map((c) => ({
-      id: c.credential.id,
-      title: c.credential.title,
-      issuer: c.credential.issuer,
-      issuedDate: c.credential.issuedDate,
-      expiryDate: c.credential.expiryDate || "No Expiry",
-      status: "Valid",
-      field: c.credential.field,
-      grade: "N/A",
-      student: c.credential.recipientAddress,
-      ipfsHash: c.ipfsCid,
-    }))
-    setCredentials(formattedCredentials)
-    setIsLoading(false)
-  }, [])
+    const fetchData = async () => {
+      const walletAddress = localStorage.getItem("walletAddress")
+      const authMethod = localStorage.getItem("authMethod")
 
-  const totalCredentials = credentials.length
-  const validCredentials = credentials.filter((c) => c.status === "Valid").length
-  const verificationCount = 47
-  const trustScore = credentials.length > 0 ? 98 : 0
+      if (authMethod === "metamask" && walletAddress) {
+        const walletCredentials = await getCredentialsByWallet(walletAddress)
+        setCredentials(walletCredentials)
+
+        const dashboardStats = await getDashboardStats(walletAddress)
+        setStats(dashboardStats)
+
+        setUser({
+          id: walletAddress,
+          wallet: walletAddress,
+          name: `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`,
+          authMethod: "metamask",
+        })
+        setIsLoading(false)
+        return
+      }
+
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser()
+
+      if (!authUser && !walletAddress) {
+        router.push("/auth/signin")
+        return
+      }
+
+      if (authUser) {
+        const { data: credentialsData, error } = await supabase
+          .from("credentials")
+          .select("*")
+          .or(`user_id.eq.${authUser.id},issuer.eq.${authUser.email},recipient_address.eq.${authUser.email}`)
+          .order("created_at", { ascending: false })
+
+        if (!error && credentialsData) {
+          setCredentials(credentialsData)
+        }
+
+        const dashboardStats = await getDashboardStats(undefined, authUser.id)
+        setStats(dashboardStats)
+
+        const { data: profileData } = await supabase.from("users").select("*").eq("id", authUser.id).single()
+
+        setUser({
+          id: authUser.id,
+          email: authUser.email,
+          name: profileData?.name || authUser.user_metadata?.full_name || authUser.email,
+          image: profileData?.avatar_url || authUser.user_metadata?.avatar_url,
+          authMethod: "google",
+        })
+      }
+
+      setIsLoading(false)
+    }
+
+    fetchData()
+  }, [router, supabase])
+
+  const { totalCredentials, validCredentials, verificationCount, trustScore } = stats
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
       <DashboardHeader />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        {/* Welcome Section */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 text-white">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
           <div>
             <h1 className="text-4xl font-bold text-white mb-2">Your Credentials Dashboard</h1>
@@ -110,7 +161,6 @@ export default function Dashboard() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Column - Credentials */}
           <div className="lg:col-span-2 space-y-6">
             <div className="flex items-center justify-between">
               <h2 className="text-2xl font-bold text-white">My Credentials</h2>
@@ -148,7 +198,6 @@ export default function Dashboard() {
           </div>
 
           <div className="space-y-6">
-            {/* Recent Activity */}
             <Card className="bg-slate-800/50 border-slate-700">
               <CardHeader>
                 <CardTitle className="text-white text-lg">Recent Activity</CardTitle>
@@ -180,7 +229,6 @@ export default function Dashboard() {
               </CardContent>
             </Card>
 
-            {/* Achievements */}
             <Card className="bg-slate-800/50 border-slate-700">
               <CardHeader>
                 <CardTitle className="text-white text-lg">Achievements</CardTitle>
@@ -208,7 +256,6 @@ export default function Dashboard() {
               </CardContent>
             </Card>
 
-            {/* Quick Actions */}
             <Card className="bg-gradient-to-br from-blue-500/10 to-emerald-500/10 border-blue-500/20">
               <CardHeader>
                 <CardTitle className="text-white text-lg">Quick Actions</CardTitle>

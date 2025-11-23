@@ -9,15 +9,14 @@ export default function IssuerPage() {
     <main className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
       <DashboardHeader />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <div className="text-sm font-semibold text-white">
         <Link href="/dashboard">
-          <Button variant="ghost" size="sm" className="mb-8 text-background">
+          <Button variant="ghost" size="sm" className="mb-8 text-white">
             ← Back to Dashboard
           </Button>
         </Link>
 
         <div className="grid lg:grid-cols-3 gap-8">
-          {/* Main Form */}
           <div className="lg:col-span-2">
             <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-8">
               <h1 className="text-3xl font-bold text-white mb-2">Issue Credentials</h1>
@@ -26,7 +25,6 @@ export default function IssuerPage() {
             </div>
           </div>
 
-          {/* Sidebar Stats */}
           <div className="space-y-6">
             <IssuerStats />
           </div>

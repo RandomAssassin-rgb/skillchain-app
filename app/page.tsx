@@ -45,6 +45,16 @@ export default function Home() {
             SkillChain
           </div>
           <div className="flex gap-4">
+            <Link href="/auth/signin">
+              <Button variant="outline" size="sm">
+                Sign In
+              </Button>
+            </Link>
+            <Link href="/auth/signin">
+              <Button size="sm" className="bg-gradient-to-r from-blue-500 to-emerald-500">
+                Get Started
+              </Button>
+            </Link>
             <Link href="/dashboard">
               <Button variant="outline" size="sm">
                 Dashboard

@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -10,7 +10,7 @@ import { useWalletInfo } from "@/lib/hooks"
 import { getMetaMaskProvider } from "@/lib/metamask"
 import type { CredentialMetadata } from "@/lib/nft-storage"
 import { issueCredential as issueCredentialAction } from "@/app/actions/credentials"
-import { storeCredential } from "@/lib/credentials-store"
+import { useRouter } from "next/navigation"
 
 const FIELDS = [
   "Computer Science",
@@ -22,19 +22,25 @@ const FIELDS = [
   "Blockchain & Web3",
   "Mobile Development",
   "UI/UX Design",
-  "Custom", // Added "Custom" option
+  "Custom",
 ]
 
 export function IssuerForm() {
   const { address: issuerAddress, isConnected } = useWalletInfo()
+  const router = useRouter()
+  const [userId, setUserId] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     name: "",
     field: "",
-    customField: "", // Added customField state
+    customField: "",
     studentAddress: "",
     expiryDate: "",
   })
   const [isLoading, setIsLoading] = useState(false)
+
+  useEffect(() => {
+    // No authentication check needed with localStorage
+  }, [])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData((prev) => ({
@@ -103,10 +109,6 @@ export function IssuerForm() {
         throw new Error(result.error || "Failed to store credential")
       }
 
-      if (result.ipfsCid) {
-        storeCredential(credentialMetadata, result.ipfsCid, signature)
-      }
-
       toast({
         title: "Credential Issued Successfully",
         description: `Credential ID: ${credentialMetadata.id}`,
@@ -114,6 +116,8 @@ export function IssuerForm() {
       })
 
       setFormData({ name: "", field: "", customField: "", studentAddress: "", expiryDate: "" })
+      router.push("/dashboard")
+      router.refresh()
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to issue credential"
       toast({
@@ -129,7 +133,6 @@ export function IssuerForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Issuer Info */}
       {isConnected && issuerAddress && (
         <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4">
           <p className="text-sm text-emerald-300">
@@ -141,7 +144,6 @@ export function IssuerForm() {
         </div>
       )}
 
-      {/* Credential Name */}
       <div>
         <label className="block text-sm font-medium text-white mb-2">Credential Name *</label>
         <Input
@@ -155,7 +157,6 @@ export function IssuerForm() {
         />
       </div>
 
-      {/* Field of Study */}
       <div>
         <label className="block text-sm font-medium text-white mb-2">Field of Study *</label>
         <Select value={formData.field} onValueChange={handleSelectChange} disabled={!isConnected}>
@@ -172,7 +173,6 @@ export function IssuerForm() {
         </Select>
       </div>
 
-      {/* Custom Field of Study */}
       {formData.field === "Custom" && (
         <div className="animate-in fade-in duration-200">
           <label className="block text-sm font-medium text-white mb-2">Custom Field of Study *</label>
@@ -188,7 +188,6 @@ export function IssuerForm() {
         </div>
       )}
 
-      {/* Student Address */}
       <div>
         <label className="block text-sm font-medium text-white mb-2">Student Wallet Address *</label>
         <Input
@@ -202,7 +201,6 @@ export function IssuerForm() {
         />
       </div>
 
-      {/* Expiry Date */}
       <div>
         <label className="block text-sm font-medium text-white mb-2">Expiry Date (Optional)</label>
         <Input
@@ -215,7 +213,6 @@ export function IssuerForm() {
         />
       </div>
 
-      {/* Info Box */}
       <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
         <p className="text-sm text-blue-300">
           ℹ️ This credential will be signed with your wallet and stored on IPFS via NFT.storage, making it tamper-proof
@@ -223,14 +220,12 @@ export function IssuerForm() {
         </p>
       </div>
 
-      {/* Connection Warning */}
       {!isConnected && (
         <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4">
           <p className="text-sm text-yellow-300">⚠️ Please connect your MetaMask wallet to issue credentials</p>
         </div>
       )}
 
-      {/* Submit Button */}
       <Button
         type="submit"
         disabled={isLoading || !isConnected}

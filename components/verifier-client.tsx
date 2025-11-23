@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { VerificationResult } from "@/components/verification-result"
-import { getCredentialById, getCredentialByCid } from "@/lib/credentials-store"
+import { getCredentialForVerification } from "@/app/actions/credentials"
 import { toast } from "@/hooks/use-toast"
 
 export function VerifierClient() {
@@ -52,7 +52,6 @@ export function VerifierClient() {
         toast({
           title: "✓ Credential Verified",
           description: "Credential loaded and verified successfully",
-          variant: "success" as any,
         })
       } catch (error) {
         console.error("[v0] Error decoding credential:", error)
@@ -75,17 +74,6 @@ export function VerifierClient() {
     }
   }, [searchParams])
 
-  const mockCredentialData = {
-    id: "SC-" + Math.floor(Math.random() * 100000),
-    title: "Bachelor of Science in Computer Science",
-    issuer: "University of Example",
-    student: "0x742d35Cc6634C0532925a3b844Bc9e7595f4bEb7",
-    issuedDate: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toLocaleDateString(),
-    expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toLocaleDateString(),
-    status: "Valid",
-    verified: true,
-  }
-
   const handleVerify = async (id?: string) => {
     const verifyId = id || tokenId
     console.log("[v0] Verifying credential ID:", verifyId)
@@ -103,13 +91,8 @@ export function VerifierClient() {
     setIsVerifying(true)
 
     try {
-      let storedCredential = getCredentialById(verifyId)
-      console.log("[v0] Found by ID:", storedCredential)
-
-      if (!storedCredential) {
-        storedCredential = getCredentialByCid(verifyId)
-        console.log("[v0] Found by CID:", storedCredential)
-      }
+      const storedCredential = await getCredentialForVerification(verifyId)
+      console.log("[v0] Found credential in database:", storedCredential)
 
       await new Promise((resolve) => setTimeout(resolve, 1500))
 
@@ -117,19 +100,19 @@ export function VerifierClient() {
         toast({
           title: "✓ Credential Verified",
           description: "This credential is valid and authentic",
-          variant: "success" as any,
         })
         setResult({
-          id: storedCredential.credential.id,
-          title: storedCredential.credential.title,
-          issuer: storedCredential.credential.issuer,
-          student: storedCredential.credential.recipientAddress,
-          issuedDate: storedCredential.credential.issuedDate,
-          expiryDate: storedCredential.credential.expiryDate || "No Expiry",
-          field: storedCredential.credential.field,
-          ipfsCid: storedCredential.ipfsCid,
+          id: storedCredential.id,
+          title: storedCredential.title,
+          issuer: storedCredential.issuer,
+          student: storedCredential.recipient_address,
+          issuedDate: storedCredential.issued_date,
+          expiryDate: storedCredential.expiry_date || "No Expiry",
+          field: storedCredential.field,
+          grade: storedCredential.grade || "N/A",
+          ipfsCid: storedCredential.ipfs_cid,
           signature: storedCredential.signature,
-          status: "Valid",
+          status: storedCredential.status === "active" ? "Valid" : storedCredential.status,
           verified: true,
         })
       } else {
@@ -144,7 +127,7 @@ export function VerifierClient() {
           status: "Not Found",
           verified: false,
           error:
-            "This credential was not found in the system. It may not have been issued yet, or you may need to view it from the device where it was issued.",
+            "This credential was not found in the system. It may not have been issued yet or the ID may be incorrect.",
         })
       }
     } catch (error) {
@@ -202,7 +185,7 @@ export function VerifierClient() {
               <label className="block text-sm font-medium text-white mb-3">Credential ID or Token</label>
               <Input
                 type="text"
-                placeholder="e.g., credential-1234567890 or paste IPFS CID"
+                placeholder="e.g., SC-1234567890 or paste IPFS CID"
                 value={tokenId}
                 onChange={(e) => setTokenId(e.target.value)}
                 onKeyPress={(e) => e.key === "Enter" && handleVerify()}

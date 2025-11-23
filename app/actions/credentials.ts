@@ -1,6 +1,7 @@
 "use server"
 
 import type { CredentialMetadata } from "@/lib/nft-storage"
+import { createServiceRoleClient } from "@/lib/supabase/server"
 
 export interface IssueCredentialInput {
   credential: CredentialMetadata
@@ -13,21 +14,41 @@ export interface IssueCredentialResponse {
   error?: string
 }
 
-// Since NFT.storage has deprecated their upload API, we generate a mock IPFS CID
-// In production, replace this with Supabase, a database, or Web3.storage w3up-client
 export async function issueCredential(input: IssueCredentialInput): Promise<IssueCredentialResponse> {
   try {
-    // Generate a deterministic mock IPFS CID based on credential data
-    // This simulates IPFS storage for demo purposes
+    const supabase = await createServiceRoleClient()
+
+    // Generate a mock CID for IPFS (can be replaced with real IPFS later)
     const credentialString = JSON.stringify(input.credential)
     const mockCid = await generateMockCid(credentialString)
 
-    console.log("[v0] Credential stored with CID:", mockCid)
+    console.log("[v0] Storing credential with CID:", mockCid)
 
-    // In a real implementation, you would:
-    // 1. Store credential in a database (Supabase, PostgreSQL, etc.)
-    // 2. Or use Web3.storage w3up-client for actual IPFS storage
-    // 3. Return the real CID or database ID
+    const { data, error } = await supabase
+      .from("credentials")
+      .insert({
+        id: input.credential.id,
+        ipfs_cid: mockCid,
+        title: input.credential.title,
+        issuer: input.credential.issuer,
+        recipient_address: input.credential.recipientAddress,
+        issued_date: input.credential.issuedDate,
+        expiry_date: input.credential.expiryDate || null,
+        field: input.credential.field,
+        signature: input.signature,
+        status: "active",
+        // user_id will be null for MetaMask-only users
+        user_id: null,
+      })
+      .select()
+      .single()
+
+    if (error) {
+      console.error("[v0] Database error:", error)
+      throw new Error(`Failed to store credential: ${error.message}`)
+    }
+
+    console.log("[v0] Credential successfully stored:", data)
 
     return {
       success: true,
@@ -71,5 +92,108 @@ export async function retrieveCredential(ipfsCid: string): Promise<CredentialMet
   } catch (error) {
     console.error("[v0] Error retrieving credential:", error)
     return null
+  }
+}
+
+export async function getCredentialsByWallet(walletAddress: string) {
+  try {
+    const supabase = await createServiceRoleClient()
+
+    const { data, error } = await supabase
+      .from("credentials")
+      .select("*")
+      .or(`issuer.eq.${walletAddress},recipient_address.eq.${walletAddress}`)
+      .order("created_at", { ascending: false })
+
+    if (error) {
+      console.error("[v0] Error fetching credentials:", error)
+      return []
+    }
+
+    return data || []
+  } catch (error) {
+    console.error("[v0] Error in getCredentialsByWallet:", error)
+    return []
+  }
+}
+
+export async function getCredentialForVerification(credentialId: string) {
+  try {
+    const supabase = await createServiceRoleClient()
+
+    const { data, error } = await supabase
+      .from("credentials")
+      .select("*")
+      .or(`id.eq.${credentialId},ipfs_cid.eq.${credentialId}`)
+      .single()
+
+    if (error) {
+      console.error("[v0] Error fetching credential:", error)
+      return null
+    }
+
+    return data
+  } catch (error) {
+    console.error("[v0] Error in getCredentialForVerification:", error)
+    return null
+  }
+}
+
+export async function getDashboardStats(walletAddress?: string, userId?: string) {
+  try {
+    const supabase = await createServiceRoleClient()
+
+    // Build query based on authentication method
+    let query = supabase.from("credentials").select("*", { count: "exact" })
+
+    if (walletAddress) {
+      query = query.or(`issuer.eq.${walletAddress},recipient_address.eq.${walletAddress}`)
+    } else if (userId) {
+      query = query.eq("user_id", userId)
+    } else {
+      return {
+        totalCredentials: 0,
+        validCredentials: 0,
+        verificationCount: 0,
+        trustScore: 0,
+      }
+    }
+
+    const { data: credentials, count, error } = await query
+
+    if (error) {
+      console.error("[v0] Error fetching stats:", error)
+      return {
+        totalCredentials: 0,
+        validCredentials: 0,
+        verificationCount: 0,
+        trustScore: 0,
+      }
+    }
+
+    const totalCredentials = count || 0
+    const validCredentials = credentials?.filter((c) => c.status === "active").length || 0
+
+    // Calculate verification count (for now, use a multiplier of credentials)
+    // In a real system, you'd have a separate verifications table
+    const verificationCount = totalCredentials * 3
+
+    // Calculate trust score based on active credentials
+    const trustScore = totalCredentials > 0 ? Math.min(95 + totalCredentials * 0.5, 100) : 0
+
+    return {
+      totalCredentials,
+      validCredentials,
+      verificationCount,
+      trustScore: Math.round(trustScore),
+    }
+  } catch (error) {
+    console.error("[v0] Error in getDashboardStats:", error)
+    return {
+      totalCredentials: 0,
+      validCredentials: 0,
+      verificationCount: 0,
+      trustScore: 0,
+    }
   }
 }
